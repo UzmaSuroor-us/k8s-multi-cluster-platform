@@ -1,0 +1,70 @@
+name: Deploy to Dev (Local)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy'
+        required: false
+        default: '1.21'
+      confirm:
+        description: 'Type "deploy" to confirm local deployment'
+        required: true
+
+jobs:
+  deploy-instructions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Validate confirmation (manual trigger only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "deploy" ]; then
+            echo "❌ Deployment cancelled - confirmation required"
+            exit 1
+          fi
+      
+      - name: Generate deployment instructions
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            IMAGE_TAG=${{ github.event.inputs.image_tag }}
+          else
+            IMAGE_TAG="1.21"
+          fi
+          
+          echo "🚀 Dev Deployment Instructions"
+          echo "=============================="
+          echo ""
+          echo "Run these commands on your local machine:"
+          echo ""
+          echo "# Deploy to dev cluster"
+          echo "kubectl config use-context kind-dev-cluster"
+          echo "helm upgrade --install sample-app helm/sample-app \\"
+          echo "  --namespace sample-app --create-namespace \\"
+          echo "  --set image.tag=$IMAGE_TAG \\"
+          echo "  --set replicaCount=2 \\"
+          echo "  --wait --timeout 5m"
+          echo ""
+          echo "# Verify deployment"
+          echo "kubectl get pods -n sample-app"
+          echo "kubectl rollout status deployment/sample-app -n sample-app"
+          echo ""
+          echo "# Access application"
+          echo "curl http://localhost:30080"
+          echo ""
+          echo "✅ Copy and run these commands locally to deploy!"
+      
+      - name: Deployment summary
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "✅ Instructions generated for LOCAL deployment"
+            echo "Image tag: ${{ github.event.inputs.image_tag }}"
+          else
+            echo "✅ Instructions generated for LOCAL deployment (auto-triggered)"
+            echo "Image tag: 1.21"
+          fi
+          echo "Target: DEV cluster (kind-dev-cluster)"
+          echo "Access: http://localhost:30080"
