@@ -1,0 +1,78 @@
+name: Rollback Deployment (Local)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to rollback'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+      confirm:
+        description: 'Type "rollback" to confirm'
+        required: true
+
+jobs:
+  rollback-instructions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Validate confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "rollback" ]; then
+            echo "❌ Rollback cancelled - confirmation required"
+            exit 1
+          fi
+      
+      - name: Generate rollback instructions
+        run: |
+          echo "🔄 Rollback Instructions for ${{ github.event.inputs.environment }}"
+          echo "================================================"
+          echo ""
+          echo "Run these commands on your local machine:"
+          echo ""
+          if [ "${{ github.event.inputs.environment }}" == "dev" ]; then
+            echo "# Switch to dev cluster"
+            echo "kubectl config use-context kind-dev-cluster"
+          else
+            echo "# Switch to prod cluster"
+            echo "kubectl config use-context kind-prod-cluster"
+          fi
+          echo ""
+          echo "# Check current revision"
+          echo "kubectl rollout history deployment/sample-app -n sample-app"
+          echo ""
+          echo "# Rollback to previous version"
+          echo "kubectl rollout undo deployment/sample-app -n sample-app"
+          echo ""
+          echo "# Wait for rollback to complete"
+          echo "kubectl rollout status deployment/sample-app -n sample-app --timeout=5m"
+          echo ""
+          echo "# Verify rollback"
+          echo "kubectl get pods -n sample-app"
+          echo ""
+          if [ "${{ github.event.inputs.environment }}" == "dev" ]; then
+            echo "# Test application"
+            echo "curl http://localhost:30080"
+          else
+            echo "# Test application"
+            echo "kubectl port-forward -n sample-app svc/sample-app 8081:80 &"
+            echo "curl http://localhost:8081"
+          fi
+          echo ""
+          echo "✅ Copy and run these commands locally to rollback!"
+      
+      - name: Rollback summary
+        run: |
+          echo "✅ Rollback instructions generated"
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          if [ "${{ github.event.inputs.environment }}" == "dev" ]; then
+            echo "Context: kind-dev-cluster"
+            echo "Access: http://localhost:30080"
+          else
+            echo "Context: kind-prod-cluster"
+            echo "Access: http://localhost:8081 (via port-forward)"
+          fi
