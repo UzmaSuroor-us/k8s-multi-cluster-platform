@@ -1,0 +1,60 @@
+name: Rollback Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to rollback'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+      confirm:
+        description: 'Type "rollback" to confirm'
+        required: true
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Validate confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "rollback" ]; then
+            echo "❌ Rollback cancelled - confirmation required"
+            exit 1
+          fi
+      
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+      
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          if [ "${{ github.event.inputs.environment }}" == "dev" ]; then
+            echo "${{ secrets.KUBECONFIG_DEV }}" | base64 -d > ~/.kube/config
+            kubectl config use-context kind-dev-cluster
+          else
+            echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > ~/.kube/config
+            kubectl config use-context kind-prod-cluster
+          fi
+      
+      - name: Get current revision
+        id: current
+        run: |
+          CURRENT=$(kubectl rollout history deployment/sample-app -n sample-app | tail -n 1 | awk '{print $1}')
+          echo "revision=$CURRENT" >> $GITHUB_OUTPUT
+      
+      - name: Rollback deployment
+        run: |
+          echo "Rolling back deployment in ${{ github.event.inputs.environment }}"
+          kubectl rollout undo deployment/sample-app -n sample-app
+          kubectl rollout status deployment/sample-app -n sample-app --timeout=5m
+      
+      - name: Verify rollback
+        run: |
+          kubectl get pods -n sample-app
+          echo "✅ Rollback completed for ${{ github.event.inputs.environment }}"
+          echo "Previous revision: ${{ steps.current.outputs.revision }}"

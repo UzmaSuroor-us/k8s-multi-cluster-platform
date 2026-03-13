@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}
+  labels:
+    app: {{ .Chart.Name }}
+    version: {{ .Chart.AppVersion }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: {{ .Values.strategy.type }}
+    {{- if eq .Values.strategy.type "RollingUpdate" }}
+    rollingUpdate:
+      maxSurge: {{ .Values.strategy.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ .Values.strategy.rollingUpdate.maxUnavailable }}
+    {{- end }}
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}
+        version: {{ .Chart.AppVersion }}
+    spec:
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.service.targetPort }}
+        {{- if .Values.healthCheck.enabled }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.healthCheck.path }}
+            port: {{ .Values.service.targetPort }}
+          initialDelaySeconds: {{ .Values.healthCheck.initialDelaySeconds }}
+          periodSeconds: {{ .Values.healthCheck.periodSeconds }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.healthCheck.path }}
+            port: {{ .Values.service.targetPort }}
+          initialDelaySeconds: {{ .Values.healthCheck.initialDelaySeconds }}
+          periodSeconds: {{ .Values.healthCheck.periodSeconds }}
+        {{- end }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}

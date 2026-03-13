@@ -1,0 +1,52 @@
+name: Deploy to Dev
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy'
+        required: false
+        default: '1.21'
+
+jobs:
+  deploy-dev:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+      
+      - name: Configure kubeconfig for dev cluster
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_DEV }}" | base64 -d > ~/.kube/config
+          kubectl config use-context kind-dev-cluster
+      
+      - name: Deploy to dev
+        run: |
+          IMAGE_TAG=${{ github.event.inputs.image_tag || '1.21' }}
+          
+          helm upgrade --install sample-app helm/sample-app \
+            --namespace sample-app --create-namespace \
+            --set image.tag=$IMAGE_TAG \
+            --set replicaCount=2 \
+            --wait --timeout 5m
+      
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/sample-app -n sample-app --timeout=5m
+          kubectl get pods -n sample-app
+          
+      - name: Run smoke tests
+        run: |
+          kubectl run curl-test --image=curlimages/curl:latest --rm -i --restart=Never -- \
+            curl -s http://sample-app.sample-app.svc.cluster.local
+      
+      - name: Deployment summary
+        run: |
+          echo "✅ Deployed to DEV cluster"
+          echo "Image tag: ${{ github.event.inputs.image_tag || '1.21' }}"
+          echo "Replicas: $(kubectl get deployment sample-app -n sample-app -o jsonpath='{.status.readyReplicas}')"

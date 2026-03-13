@@ -1,0 +1,51 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: pod-failure-test
+  namespace: sample-app
+spec:
+  action: pod-failure
+  mode: one
+  duration: "30s"
+  selector:
+    namespaces:
+      - sample-app
+    labelSelectors:
+      app: sample-app
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-delay-test
+  namespace: sample-app
+spec:
+  action: delay
+  mode: one
+  selector:
+    namespaces:
+      - sample-app
+    labelSelectors:
+      app: sample-app
+  delay:
+    latency: "100ms"
+    correlation: "100"
+    jitter: "0ms"
+  duration: "1m"
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: cpu-stress-test
+  namespace: sample-app
+spec:
+  mode: one
+  selector:
+    namespaces:
+      - sample-app
+    labelSelectors:
+      app: sample-app
+  stressors:
+    cpu:
+      workers: 2
+      load: 80
+  duration: "2m"

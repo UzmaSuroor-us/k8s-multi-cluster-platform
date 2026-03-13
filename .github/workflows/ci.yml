@@ -1,0 +1,50 @@
+name: CI - Build and Test
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ develop ]
+
+jobs:
+  lint-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Lint Helm Charts
+        run: |
+          helm lint helm/sample-app
+      
+      - name: Validate Kubernetes Manifests
+        run: |
+          helm template helm/sample-app | kubectl apply --dry-run=client -f -
+      
+      - name: Terraform Validate
+        working-directory: terraform
+        run: |
+          terraform init
+          terraform validate
+
+  test:
+    runs-on: ubuntu-latest
+    needs: lint-and-validate
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.8.0
+        with:
+          cluster_name: test-cluster
+      
+      - name: Deploy sample app
+        run: |
+          helm upgrade --install sample-app helm/sample-app \
+            --namespace sample-app --create-namespace \
+            --set image.tag=1.21 \
+            --wait --timeout 2m
+      
+      - name: Test deployment
+        run: |
+          kubectl wait --for=condition=ready pod -l app=sample-app -n sample-app --timeout=120s
+          kubectl get pods -n sample-app
