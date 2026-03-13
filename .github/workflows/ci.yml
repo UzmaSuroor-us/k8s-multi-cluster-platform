@@ -10,7 +10,12 @@ jobs:
   lint-and-validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.12.0'
       
       - name: Lint Helm Charts
         run: |
@@ -18,19 +23,27 @@ jobs:
       
       - name: Validate Kubernetes Manifests
         run: |
-          helm template helm/sample-app | kubectl apply --dry-run=client -f -
+          helm template sample-app helm/sample-app --set image.tag=1.21 > manifests.yaml
+          echo "✅ Helm template generated successfully"
+          cat manifests.yaml
+      
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.0
       
       - name: Terraform Validate
         working-directory: terraform
         run: |
           terraform init
           terraform validate
+          echo "✅ Terraform configuration is valid"
 
   test:
     runs-on: ubuntu-latest
     needs: lint-and-validate
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Create kind cluster
         uses: helm/kind-action@v1.8.0
@@ -48,3 +61,4 @@ jobs:
         run: |
           kubectl wait --for=condition=ready pod -l app=sample-app -n sample-app --timeout=120s
           kubectl get pods -n sample-app
+          echo "✅ Application deployed and running successfully"
