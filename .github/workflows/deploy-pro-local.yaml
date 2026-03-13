@@ -1,0 +1,77 @@
+name: Deploy to Production (Local)
+
+on:
+  release:
+    types: [ published ]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy'
+        required: true
+      confirm:
+        description: 'Type "deploy" to confirm production deployment'
+        required: true
+
+jobs:
+  deploy-instructions:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Validate confirmation
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "deploy" ]; then
+            echo "❌ Deployment cancelled - confirmation required"
+            exit 1
+          fi
+      
+      - name: Generate deployment instructions
+        run: |
+          if [ "${{ github.event_name }}" == "release" ]; then
+            IMAGE_TAG=${{ github.event.release.tag_name }}
+          else
+            IMAGE_TAG=${{ github.event.inputs.image_tag }}
+          fi
+          
+          echo "🚀 Production Deployment Instructions"
+          echo "========================================"
+          echo ""
+          echo "Run these commands on your local machine:"
+          echo ""
+          echo "# Backup current deployment"
+          echo "kubectl config use-context kind-prod-cluster"
+          echo "kubectl get deployment sample-app -n sample-app -o yaml > backup-deployment.yaml || true"
+          echo ""
+          echo "# Deploy to production"
+          echo "helm upgrade --install sample-app helm/sample-app \\"
+          echo "  --namespace sample-app --create-namespace \\"
+          echo "  --set image.tag=$IMAGE_TAG \\"
+          echo "  --set replicaCount=3 \\"
+          echo "  --wait --timeout 10m"
+          echo ""
+          echo "# Verify deployment"
+          echo "kubectl rollout status deployment/sample-app -n sample-app --timeout=10m"
+          echo "kubectl get pods -n sample-app"
+          echo ""
+          echo "# Test application"
+          echo "kubectl port-forward -n sample-app svc/sample-app 8081:80 &"
+          echo "curl http://localhost:8081"
+          echo ""
+          echo "# If deployment fails, rollback:"
+          echo "kubectl rollout undo deployment/sample-app -n sample-app"
+          echo ""
+          echo "✅ Copy and run these commands locally to deploy!"
+      
+      - name: Deployment summary
+        run: |
+          if [ "${{ github.event_name }}" == "release" ]; then
+            echo "✅ Instructions generated for PRODUCTION deployment"
+            echo "Release: ${{ github.event.release.tag_name }}"
+          else
+            echo "✅ Instructions generated for PRODUCTION deployment"
+            echo "Image tag: ${{ github.event.inputs.image_tag }}"
+          fi
+          echo "Target: PROD cluster (kind-prod-cluster)"
+          echo "Access: http://localhost:8081 (via port-forward)"
